@@ -1,0 +1,108 @@
+#include <ZumoMotors.h>
+#include <avr/pgmspace.h>
+#include <Wire.h>
+#include <LSM303.h>
+
+ZumoMotors motors;
+LSM303 lsm;
+LSM303::vector<int16_t> running_min = {32767, 32767, 32767}, running_max = {-32768, -32768, -32768};
+const int numReadings = 15;
+
+int xAccAvg[numReadings];      // the readings from the analog input
+int xIndex = 0;                  // the index of the current reading
+int xTotal = 0;                  // the running total
+int xAverage = 0;                // the average
+
+int yAccAvg[numReadings];      // the readings from the analog input
+int yIndex = 0;                  // the index of the current reading
+int yTotal = 0;                  // the running total
+int yAverage = 0;                // the average
+
+int absDiff;
+
+float currentLSMheading = 0;
+float previousLSMheading = 0;
+
+long delayAfterTurn = 400;
+long delayAfterContact = 400;
+long previousMillis = 0;
+long randomSpeed;
+
+
+void setup()
+{
+	Serial.begin(9600);
+	Wire.begin();
+	lsm.init();
+	lsm.enableDefault();
+        delay(500);
+        int startTime = millis();
+	for (int thisReading = 0; thisReading < numReadings; thisReading++)
+        xAccAvg[thisReading] = 0;
+        delay(500);
+        motors.setLeftSpeed(180);
+        motors.setRightSpeed(180);
+        
+}
+
+void loop()
+{
+        randomSpeed = random(75,250);
+        long currentMillis = millis();
+	lsm.read();
+	double xRead = lsm.a.x;
+	double yRead = lsm.a.y;
+        currentLSMheading = lsm.heading();
+  
+        xTotal = xTotal - xAccAvg[xIndex]; 
+	xAccAvg[xIndex] = xRead; 
+	xTotal = xTotal + (xAccAvg[xIndex]);       
+	xIndex = xIndex + 1;                    
+	if (xIndex >= numReadings)              
+	  xIndex = 0;      
+	xAverage = xTotal / numReadings;
+
+	delay(1);        // delay in between reads for stability
+	////////////////////////////////
+		
+	yTotal = yTotal - yAccAvg[yIndex];         
+	yAccAvg[yIndex] = xRead; 
+	yTotal = yTotal + yAccAvg[yIndex];       
+	yIndex = yIndex + 1;                    
+
+	if (yIndex >= numReadings)               
+	yIndex = 0;                           
+	yAverage = yTotal / numReadings;   
+	delay(1);        // delay in between reads for stability
+        
+        
+	absDiff = abs(xRead-xAverage);
+        Serial.println(abs(xAverage));
+        if (absDiff < 2000 && absDiff >=100 &&(currentMillis-previousMillis) >= delayAfterTurn) {
+           motors.setLeftSpeed(180);
+           motors.setRightSpeed(180);
+           previousMillis = currentMillis;
+           Serial.println("FORWARD");
+        //   xAverage=50;
+        }
+        else if (absDiff >= 2000 && (currentMillis-previousMillis) >= delayAfterContact) {
+           motors.setLeftSpeed(-400);
+           motors.setRightSpeed(-400);
+           motors.setLeftSpeed(randomSpeed);
+           motors.setRightSpeed(-randomSpeed);
+           previousMillis = currentMillis;
+           previousLSMheading = currentLSMheading;
+           Serial.println("HIT HIT HIT");
+        //    xAverage=50;          
+        }
+       
+        else if (absDiff <50 &&(currentMillis-previousMillis) >= delayAfterContact){
+	   motors.setLeftSpeed(-randomSpeed);
+           motors.setRightSpeed(-randomSpeed);
+           previousMillis = currentMillis;
+           previousLSMheading = currentLSMheading;
+       //    xAverage=0;
+        }
+
+
+}
